@@ -233,3 +233,11 @@ button:hover { transform: translateY(-2px); }
   .summary-grid { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: 1fr; }
 }
+.server-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.self-badge { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid rgba(102,224,255,0.45); border-radius: 999px; color: var(--accent); background: rgba(102,224,255,0.1); font-size: 0.68rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
+.edit-button { color: var(--text); cursor: pointer; }
+.card-actions { flex-wrap: wrap; }
+.card-link,
+.edit-button,
+.delete-button { color: var(--text); text-decoration: none; border: 1px solid var(--border); border-radius: 999px; background: rgba(255,255,255,0.08); padding: 10px 13px; font-size: 0.86rem; font-weight: 800; }
+.delete-button { color: #fecdd3; cursor: pointer; }

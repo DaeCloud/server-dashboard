@@ -1,6 +1,7 @@
 const state = {
   servers: [],
   details: new Map(),
+  editingServerId: '',
 };
 
 const elements = {
@@ -9,6 +10,9 @@ const elements = {
   dialog: document.querySelector('#server-dialog'),
   form: document.querySelector('#server-form'),
   formError: document.querySelector('#form-error'),
+  dialogEyebrow: document.querySelector('#dialog-eyebrow'),
+  dialogTitle: document.querySelector('#dialog-title'),
+  submitServer: document.querySelector('#submit-server'),
   openAddServer: document.querySelector('#open-add-server'),
   closeDialog: document.querySelector('#close-dialog'),
   refresh: document.querySelector('#refresh'),
@@ -107,13 +111,17 @@ function renderCard(server) {
   const detail = state.details.get(server.id) || { status: 'loading' };
   const statusClass = detail.status === 'up' ? 'status-up' : detail.status === 'down' ? 'status-down' : 'status-loading';
   const statusLabel = detail.status === 'up' ? 'Online' : detail.status === 'down' ? 'Offline' : 'Checking';
+  const selfBadge = server.isSelf ? '<span class="self-badge">Dashboard</span>' : '';
 
   return `
     <article class="server-card">
       <div class="card-content">
         <div class="card-top">
           <div>
-            <h3 class="server-name">${escapeHtml(server.name)}</h3>
+            <div class="server-title-row">
+              <h3 class="server-name">${escapeHtml(server.name)}</h3>
+              ${selfBadge}
+            </div>
             <p class="server-host">${escapeHtml(server.host)}</p>
           </div>
           <span class="status-pill ${statusClass}"><span class="status-dot"></span>${statusLabel}</span>
@@ -130,6 +138,7 @@ function renderCard(server) {
         ${detail.error ? `<p class="form-error">${escapeHtml(detail.error)}</p>` : ''}
         <div class="card-actions">
           <a class="card-link" href="${escapeAttribute(server.whoamiUrl)}" target="_blank" rel="noreferrer">Open whoami</a>
+          <button class="edit-button" type="button" data-edit-id="${escapeAttribute(server.id)}">Edit</button>
           <button class="delete-button" type="button" data-delete-id="${escapeAttribute(server.id)}">Remove</button>
         </div>
       </div>
@@ -140,6 +149,28 @@ function metric(value, suffix = '') {
   return value ? `${numberFormatter.format(value)}${suffix}` : '—';
 }
 
+function openServerDialog(server = null) {
+  state.editingServerId = server?.id || '';
+  elements.formError.textContent = '';
+  elements.form.reset();
+
+  if (server) {
+    elements.dialogEyebrow.textContent = server.isSelf ? 'Dashboard node' : 'Known node';
+    elements.dialogTitle.textContent = 'Edit server';
+    elements.submitServer.textContent = 'Save changes';
+    elements.form.elements.name.value = server.name;
+    elements.form.elements.ipAddress.value = server.ipAddress;
+    elements.form.elements.host.value = server.host;
+    elements.form.elements.whoamiUrl.value = server.whoamiUrl;
+  } else {
+    elements.dialogEyebrow.textContent = 'New node';
+    elements.dialogTitle.textContent = 'Add server';
+    elements.submitServer.textContent = 'Save server';
+  }
+
+  elements.dialog.showModal();
+}
+
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 }
@@ -148,7 +179,7 @@ function escapeAttribute(value) {
   return escapeHtml(value).replace(/`/g, '&#96;');
 }
 
-elements.openAddServer.addEventListener('click', () => elements.dialog.showModal());
+elements.openAddServer.addEventListener('click', () => openServerDialog());
 elements.closeDialog.addEventListener('click', () => elements.dialog.close());
 elements.refresh.addEventListener('click', refreshWhoamiDetails);
 
@@ -157,8 +188,9 @@ elements.form.addEventListener('submit', async (event) => {
   elements.formError.textContent = '';
 
   const payload = Object.fromEntries(new FormData(elements.form));
-  const response = await fetch('/api/servers', {
-    method: 'POST',
+  const isEditing = Boolean(state.editingServerId);
+  const response = await fetch(isEditing ? `/api/servers/${state.editingServerId}` : '/api/servers', {
+    method: isEditing ? 'PUT' : 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
@@ -170,14 +202,22 @@ elements.form.addEventListener('submit', async (event) => {
   }
 
   elements.form.reset();
+  state.editingServerId = '';
   elements.dialog.close();
   await loadServers();
 });
 
 elements.grid.addEventListener('click', async (event) => {
-  const button = event.target.closest('[data-delete-id]');
-  if (!button) return;
-  await fetch(`/api/servers/${button.dataset.deleteId}`, { method: 'DELETE' });
+  const editButton = event.target.closest('[data-edit-id]');
+  if (editButton) {
+    const server = state.servers.find((candidate) => candidate.id === editButton.dataset.editId);
+    if (server) openServerDialog(server);
+    return;
+  }
+
+  const deleteButton = event.target.closest('[data-delete-id]');
+  if (!deleteButton) return;
+  await fetch(`/api/servers/${deleteButton.dataset.deleteId}`, { method: 'DELETE' });
   await loadServers();
 });
 

@@ -15,7 +15,7 @@
         <div>
           <p class="eyebrow">Fleet Command</p>
           <h1>Server Dashboard</h1>
-          <p class="hero-copy">Monitor availability and capacity for every server from one polished, JSON-backed dashboard.</p>
+          <p class="hero-copy">Monitor availability and capacity for every server from one polished dashboard that can also run as a whoami provider.</p>
         </div>
         <button class="primary-action" id="open-add-server" type="button">+ Add server</button>
       </section>
@@ -60,8 +60,8 @@
       <form id="server-form" method="dialog" class="server-form">
         <div class="dialog-heading">
           <div>
-            <p class="eyebrow">New node</p>
-            <h2>Add server</h2>
+            <p class="eyebrow" id="dialog-eyebrow">New node</p>
+            <h2 id="dialog-title">Add server</h2>
           </div>
           <button class="icon-button" id="close-dialog" aria-label="Close add server dialog" type="button">×</button>
         </div>
@@ -84,7 +84,7 @@
         </label>
 
         <p class="form-error" id="form-error" role="alert"></p>
-        <button class="primary-action full" type="submit">Save server</button>
+        <button class="primary-action full" id="submit-server" type="submit">Save server</button>
       </form>
     </dialog>
 
