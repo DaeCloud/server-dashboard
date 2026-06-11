@@ -192,6 +192,8 @@ async function getWhoamiDetails(options = {}) {
   const storage = await getStorageDetails(getEnv('WHOAMI_STORAGE_PATH') || '/');
   const hostname = getEnv('WHOAMI_HOST', 'SELF_HOST') || os.hostname();
 
+  const operatingSystem = `${os.type()} ${os.release()}`;
+
   return {
     service: 'server-dashboard whoami',
     mode: options.mode || 'dashboard',
@@ -199,13 +201,19 @@ async function getWhoamiDetails(options = {}) {
     host: hostname,
     hostname,
     ipAddress: getEnv('WHOAMI_IP_ADDRESS', 'SELF_IP_ADDRESS') || firstPrivateAddress() || '127.0.0.1',
-    os: `${os.type()} ${os.release()}`,
+    os: operatingSystem,
     platform: os.platform(),
     arch: os.arch(),
     cpus: cpus.length,
     cpu: {
       cores: cpus.length,
       model: cpus[0]?.model || 'Unknown CPU',
+    },
+    system: {
+      os: operatingSystem,
+      platform: os.platform(),
+      arch: os.arch(),
+      cpus: cpus.length,
     },
     memoryGb: bytesToGigabytes(memoryBytes),
     memory: {

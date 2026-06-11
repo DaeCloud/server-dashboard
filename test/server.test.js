@@ -132,6 +132,9 @@ test('getWhoamiDetails includes dashboard capacity fields', async () => {
   const details = await getWhoamiDetails();
   assert.equal(details.service, 'server-dashboard whoami');
   assert.ok(details.cpus >= 1);
+  assert.equal(details.cpu.cores, details.cpus);
+  assert.equal(details.system.cpus, details.cpus);
+  assert.equal(details.system.os, details.os);
   assert.ok(details.memoryGb > 0);
   assert.equal(details.memory.unit, 'bytes');
 });

@@ -49,23 +49,30 @@ async function refreshWhoamiDetails() {
 }
 
 function normalizeDetails(details) {
+  const memory = findNumberWithPath(details, ['memoryGb', 'memoryGB', 'memory_gb', 'memory.totalGb', 'memory.total', 'mem.total', 'ram.total']);
+  const storage = findNumberWithPath(details, ['storageGb', 'storageGB', 'storage_gb', 'storage.totalGb', 'storage.total', 'disk.total', 'disks.total']);
+
   return {
     status: 'up',
     cpus: findNumber(details, ['cpus', 'cpuCount', 'cpu_count', 'cpu.cores', 'system.cpus']) || 0,
-    memoryGb: toGigabytes(findNumber(details, ['memoryGb', 'memoryGB', 'memory_gb', 'memory.totalGb', 'memory.total', 'mem.total', 'ram.total']), details),
-    storageGb: toGigabytes(findNumber(details, ['storageGb', 'storageGB', 'storage_gb', 'storage.totalGb', 'storage.total', 'disk.total', 'disks.total']), details),
+    memoryGb: toGigabytes(memory.value, details, memory.path),
+    storageGb: toGigabytes(storage.value, details, storage.path),
     os: findString(details, ['os', 'platform', 'system.os', 'host.os']) || 'Unknown OS',
     raw: details,
   };
 }
 
 function findNumber(source, paths) {
+  return findNumberWithPath(source, paths).value;
+}
+
+function findNumberWithPath(source, paths) {
   for (const path of paths) {
     const value = path.split('.').reduce((current, key) => current?.[key], source);
     const parsed = typeof value === 'string' ? Number(value.replace(/[^\d.]/g, '')) : Number(value);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    if (Number.isFinite(parsed) && parsed > 0) return { value: parsed, path };
   }
-  return 0;
+  return { value: 0, path: '' };
 }
 
 function findString(source, paths) {
@@ -76,9 +83,14 @@ function findString(source, paths) {
   return '';
 }
 
-function toGigabytes(value, details) {
+function toGigabytes(value, details, sourcePath = '') {
   if (!value) return 0;
-  const unit = findString(details, ['memory.unit', 'storage.unit', 'unit']).toLowerCase();
+  if (/(^|[._])gb$/i.test(sourcePath) || /(^|[._])totalgb$/i.test(sourcePath)) return value;
+
+  const unitPaths = sourcePath.startsWith('storage.') || sourcePath.startsWith('disk.') || sourcePath.startsWith('disks.')
+    ? ['storage.unit', 'disk.unit', 'disks.unit', 'unit']
+    : ['memory.unit', 'mem.unit', 'ram.unit', 'unit'];
+  const unit = findString(details, unitPaths).toLowerCase();
   if (unit === 'bytes' || value > 1024 * 1024) return value / 1024 / 1024 / 1024;
   if (unit === 'mb' || unit === 'megabytes') return value / 1024;
   return value;
