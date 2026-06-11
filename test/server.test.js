@@ -137,4 +137,9 @@ test('getWhoamiDetails includes dashboard capacity fields', async () => {
   assert.equal(details.system.os, details.os);
   assert.ok(details.memoryGb > 0);
   assert.equal(details.memory.unit, 'bytes');
+  assert.ok(details.storageGb > 0);
+  assert.ok(details.storage.used >= 0);
+  assert.equal(details.storage.usedGb, Math.round((details.storage.used / 1024 / 1024 / 1024) * 10) / 10);
+  assert.ok(details.storage.usedPercent >= 0);
+  assert.ok(details.storage.usedPercent <= 100);
 });

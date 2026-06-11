@@ -203,6 +203,13 @@ button:hover { transform: translateY(-2px); }
 .metric { padding: 14px; border: 1px solid var(--border); border-radius: 18px; background: rgba(0,0,0,0.16); }
 .metric span { display: block; color: var(--muted); font-size: 0.72rem; font-weight: 800; text-transform: uppercase; }
 .metric strong { display: block; margin-top: 8px; font-size: 1.05rem; }
+
+.storage-metric { grid-column: span 1; }
+.storage-usage { margin-top: 12px; }
+.storage-usage-copy { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: var(--muted); font-size: 0.72rem; font-weight: 800; }
+.storage-usage-copy span { text-transform: none; }
+.storage-progress { overflow: hidden; height: 9px; border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; background: rgba(255,255,255,0.1); }
+.storage-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--good), var(--accent), var(--accent-strong)); box-shadow: 0 0 18px rgba(102,224,255,0.35); transition: width 240ms ease; }
 .card-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 18px; }
 .card-link,
 .delete-button { color: var(--text); text-decoration: none; border: 1px solid var(--border); border-radius: 999px; background: rgba(255,255,255,0.08); padding: 10px 13px; font-size: 0.86rem; font-weight: 800; }
@@ -232,6 +239,7 @@ button:hover { transform: translateY(-2px); }
   .panel { padding: 22px; border-radius: 24px; }
   .summary-grid { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: 1fr; }
+  .storage-metric { grid-column: auto; }
 }
 .server-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .self-badge { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid rgba(102,224,255,0.45); border-radius: 999px; color: var(--accent); background: rgba(102,224,255,0.1); font-size: 0.68rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }

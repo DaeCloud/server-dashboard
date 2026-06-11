@@ -49,14 +49,43 @@ async function refreshWhoamiDetails() {
 }
 
 function normalizeDetails(details) {
-  const memory = findNumberWithPath(details, ['memoryGb', 'memoryGB', 'memory_gb', 'memory.totalGb', 'memory.total', 'mem.total', 'ram.total']);
-  const storage = findNumberWithPath(details, ['storageGb', 'storageGB', 'storage_gb', 'storage.totalGb', 'storage.total', 'disk.total', 'disks.total']);
+  const memory = findNumberWithPath(details, [
+    'memoryGb', 'memoryGB', 'memory_gb', 'memory.totalGb', 'memory.totalGB',
+    'memory.total', 'memory.totalBytes', 'mem.total', 'ram.total',
+  ]);
+  const storage = findNumberWithPath(details, [
+    'storageGb', 'storageGB', 'storage_gb', 'storage.totalGb', 'storage.totalGB',
+    'storage.total', 'storage.totalBytes', 'disk.total', 'disks.total',
+  ]);
+  const storageFree = findNumberWithPath(details, [
+    'storage.freeGb', 'storage.freeGB', 'storage.free', 'storage.freeBytes',
+    'storage.availableGb', 'storage.available', 'disk.free', 'disks.free',
+  ]);
+  const storageUsed = findNumberWithPath(details, [
+    'storage.usedGb', 'storage.usedGB', 'storage.used', 'storage.usedBytes',
+    'disk.used', 'disks.used',
+  ]);
+  const explicitStoragePercent = findNumber(details, [
+    'storage.usedPercent', 'storage.percentUsed', 'storage.usagePercent',
+    'disk.usedPercent', 'disks.usedPercent',
+  ]);
+
+  const memoryGb = toGigabytes(memory, details);
+  const storageGb = toGigabytes(storage, details);
+  const storageFreeGb = toGigabytes(storageFree, details);
+  const storageUsedGb = toGigabytes(storageUsed, details) || Math.max(storageGb - storageFreeGb, 0);
+  const storageUsedPercent = clampPercent(
+    explicitStoragePercent || (storageGb > 0 ? (storageUsedGb / storageGb) * 100 : 0),
+  );
 
   return {
     status: 'up',
     cpus: findNumber(details, ['cpus', 'cpuCount', 'cpu_count', 'cpu.cores', 'system.cpus']) || 0,
-    memoryGb: toGigabytes(memory.value, details, memory.path),
-    storageGb: toGigabytes(storage.value, details, storage.path),
+    memoryGb,
+    storageGb,
+    storageFreeGb,
+    storageUsedGb,
+    storageUsedPercent,
     os: findString(details, ['os', 'platform', 'system.os', 'host.os']) || 'Unknown OS',
     raw: details,
   };
@@ -68,32 +97,68 @@ function findNumber(source, paths) {
 
 function findNumberWithPath(source, paths) {
   for (const path of paths) {
-    const value = path.split('.').reduce((current, key) => current?.[key], source);
-    const parsed = typeof value === 'string' ? Number(value.replace(/[^\d.]/g, '')) : Number(value);
-    if (Number.isFinite(parsed) && parsed > 0) return { value: parsed, path };
+    const rawValue = getPathValue(source, path);
+    const parsed = parseNumber(rawValue);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return { value: parsed, path, rawValue, unit: parseUnit(rawValue) };
+    }
   }
-  return { value: 0, path: '' };
+  return { value: 0, path: '', rawValue: undefined, unit: '' };
+}
+
+function getPathValue(source, path) {
+  return path.split('.').reduce((current, key) => current?.[key], source);
+}
+
+function parseNumber(value) {
+  if (typeof value === 'string') return Number(value.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)?.[0]);
+  return Number(value);
+}
+
+function parseUnit(value) {
+  if (typeof value !== 'string') return '';
+  return value.toLowerCase().match(/\b(bytes?|b|kib|kb|mib|mb|gib|gb|tib|tb)\b/)?.[1] || '';
 }
 
 function findString(source, paths) {
   for (const path of paths) {
-    const value = path.split('.').reduce((current, key) => current?.[key], source);
+    const value = getPathValue(source, path);
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
 }
 
-function toGigabytes(value, details, sourcePath = '') {
-  if (!value) return 0;
-  if (/(^|[._])gb$/i.test(sourcePath) || /(^|[._])totalgb$/i.test(sourcePath)) return value;
+function toGigabytes(measurement, details) {
+  const value = typeof measurement === 'object' ? measurement.value : measurement;
+  const sourcePath = typeof measurement === 'object' ? measurement.path : '';
+  const inlineUnit = typeof measurement === 'object' ? measurement.unit : '';
 
+  if (!value) return 0;
+  if (isGigabytePath(sourcePath)) return value;
+
+  const unit = (inlineUnit || findUnitForPath(details, sourcePath)).toLowerCase();
+  if (unit === 'tb' || unit === 'tib') return value * 1024;
+  if (unit === 'gb' || unit === 'gib') return value;
+  if (unit === 'mb' || unit === 'mib' || unit === 'megabytes') return value / 1024;
+  if (unit === 'kb' || unit === 'kib') return value / 1024 / 1024;
+  if (unit === 'bytes' || unit === 'byte' || unit === 'b' || value > 1024 * 1024) return value / 1024 / 1024 / 1024;
+  return value;
+}
+
+function isGigabytePath(sourcePath) {
+  return /g(?:i)?b$/i.test(sourcePath);
+}
+
+function findUnitForPath(details, sourcePath = '') {
   const unitPaths = sourcePath.startsWith('storage.') || sourcePath.startsWith('disk.') || sourcePath.startsWith('disks.')
     ? ['storage.unit', 'disk.unit', 'disks.unit', 'unit']
     : ['memory.unit', 'mem.unit', 'ram.unit', 'unit'];
-  const unit = findString(details, unitPaths).toLowerCase();
-  if (unit === 'bytes' || value > 1024 * 1024) return value / 1024 / 1024 / 1024;
-  if (unit === 'mb' || unit === 'megabytes') return value / 1024;
-  return value;
+  return findString(details, unitPaths);
+}
+
+function clampPercent(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, value));
 }
 
 function render() {
@@ -124,6 +189,7 @@ function renderCard(server) {
   const statusClass = detail.status === 'up' ? 'status-up' : detail.status === 'down' ? 'status-down' : 'status-loading';
   const statusLabel = detail.status === 'up' ? 'Online' : detail.status === 'down' ? 'Offline' : 'Checking';
   const selfBadge = server.isSelf ? '<span class="self-badge">Dashboard</span>' : '';
+  const storagePercent = Math.round(detail.storageUsedPercent || 0);
 
   return `
     <article class="server-card">
@@ -145,7 +211,11 @@ function renderCard(server) {
         <div class="metric-grid">
           <div class="metric"><span>CPUs</span><strong>${metric(detail.cpus)}</strong></div>
           <div class="metric"><span>Memory</span><strong>${metric(detail.memoryGb, ' GB')}</strong></div>
-          <div class="metric"><span>Storage</span><strong>${metric(detail.storageGb, ' GB')}</strong></div>
+          <div class="metric storage-metric">
+            <span>Storage</span>
+            <strong>${metric(detail.storageGb, ' GB')}</strong>
+            ${renderStorageUsage(detail, storagePercent)}
+          </div>
         </div>
         ${detail.error ? `<p class="form-error">${escapeHtml(detail.error)}</p>` : ''}
         <div class="card-actions">
@@ -155,6 +225,21 @@ function renderCard(server) {
         </div>
       </div>
     </article>`;
+}
+
+function renderStorageUsage(detail, storagePercent) {
+  if (detail.status !== 'up' || !detail.storageGb) return '';
+
+  return `
+    <div class="storage-usage" aria-label="Storage usage: ${storagePercent}% used">
+      <div class="storage-usage-copy">
+        <span>${metric(detail.storageUsedGb, ' GB')} used</span>
+        <span>${storagePercent}%</span>
+      </div>
+      <div class="storage-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${storagePercent}">
+        <span style="width: ${storagePercent}%"></span>
+      </div>
+    </div>`;
 }
 
 function metric(value, suffix = '') {

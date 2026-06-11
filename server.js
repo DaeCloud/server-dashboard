@@ -233,22 +233,29 @@ async function getStorageDetails(storagePath) {
     const stats = await fs.statfs(storagePath);
     const total = stats.blocks * stats.bsize;
     const free = stats.bfree * stats.bsize;
+    const used = Math.max(total - free, 0);
     return {
       path: storagePath,
       total,
       free,
+      used,
       unit: 'bytes',
       totalGb: bytesToGigabytes(total),
       freeGb: bytesToGigabytes(free),
+      usedGb: bytesToGigabytes(used),
+      usedPercent: total > 0 ? Math.round((used / total) * 1000) / 10 : 0,
     };
   } catch (error) {
     return {
       path: storagePath,
       total: 0,
       free: 0,
+      used: 0,
       unit: 'bytes',
       totalGb: 0,
       freeGb: 0,
+      usedGb: 0,
+      usedPercent: 0,
       error: error.message,
     };
   }
