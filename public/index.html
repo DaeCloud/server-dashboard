@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Server Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Fleet Command</p>
+          <h1>Server Dashboard</h1>
+          <p class="hero-copy">Monitor availability and capacity for every server from one polished, JSON-backed dashboard.</p>
+        </div>
+        <button class="primary-action" id="open-add-server" type="button">+ Add server</button>
+      </section>
+
+      <section class="summary-grid" aria-label="Server summary">
+        <article class="summary-card up">
+          <span class="summary-label">Servers up</span>
+          <strong id="servers-up">0 / 0</strong>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Total CPUs</span>
+          <strong id="total-cpus">0</strong>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Total memory</span>
+          <strong id="total-memory">0 GB</strong>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Total storage</span>
+          <strong id="total-storage">0 GB</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Inventory</p>
+            <h2>Your servers</h2>
+          </div>
+          <button class="secondary-action" id="refresh" type="button">Refresh whoami data</button>
+        </div>
+        <div class="server-grid" id="server-grid"></div>
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon">⌁</div>
+          <h3>No servers yet</h3>
+          <p>Add your first server and connect a whoami endpoint to populate live details.</p>
+        </div>
+      </section>
+    </main>
+
+    <dialog class="server-dialog" id="server-dialog">
+      <form id="server-form" method="dialog" class="server-form">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">New node</p>
+            <h2>Add server</h2>
+          </div>
+          <button class="icon-button" id="close-dialog" aria-label="Close add server dialog" type="button">×</button>
+        </div>
+
+        <label>
+          <span>Name</span>
+          <input name="name" type="text" placeholder="Production API" required />
+        </label>
+        <label>
+          <span>IP address</span>
+          <input name="ipAddress" type="text" placeholder="192.168.1.25" required />
+        </label>
+        <label>
+          <span>Host</span>
+          <input name="host" type="text" placeholder="api-01.example.com" required />
+        </label>
+        <label>
+          <span>Whoami endpoint</span>
+          <input name="whoamiUrl" type="url" placeholder="https://api-01.example.com/whoami" required />
+        </label>
+
+        <p class="form-error" id="form-error" role="alert"></p>
+        <button class="primary-action full" type="submit">Save server</button>
+      </form>
+    </dialog>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

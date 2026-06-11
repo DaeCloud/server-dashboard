@@ -1,0 +1,17 @@
+{
+  "name": "server-dashboard",
+  "version": "1.0.0",
+  "description": "A beautiful JSON-backed dashboard for tracking servers.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "dashboard",
+    "servers"
+  ],
+  "author": "",
+  "license": "MIT"
+}
