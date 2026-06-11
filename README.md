@@ -49,13 +49,17 @@ The bundled whoami provider returns fields similar to this:
   "host": "api-01.example.com",
   "ipAddress": "10.0.0.20",
   "cpus": 8,
+  "cpu": { "cores": 8, "model": "Example CPU" },
   "memoryGb": 32,
+  "memory": { "total": 34359738368, "free": 8589934592, "unit": "bytes" },
   "storageGb": 512,
-  "os": "Linux 6.8.0"
+  "storage": { "total": 549755813888, "free": 274877906944, "unit": "bytes" },
+  "os": "Linux 6.8.0",
+  "system": { "os": "Linux 6.8.0", "platform": "linux", "arch": "x64", "cpus": 8 }
 }
 ```
 
-The dashboard accepts several common field names when reading whoami JSON. Nested forms like `memory.total`, `storage.total`, `cpu.cores`, and `system.os` are also supported.
+The dashboard accepts several common field names when reading whoami JSON. Nested forms like `memory.total`, `storage.total`, `cpu.cores`, and `system.os` are also supported. Gigabyte fields such as `memoryGb`, `storageGb`, `memory.totalGb`, and `storage.totalGb` are treated as already converted values even when byte-based nested details are present.
 
 ## Run locally
 
