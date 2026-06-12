@@ -42,6 +42,19 @@ function createApp(options = {}) {
         return sendJson(res, 200, await readServers(dataFile, { registerSelf, requestUrl, whoamiPath }));
       }
 
+      if (req.method === 'GET' && requestUrl.pathname.startsWith('/api/servers/') && requestUrl.pathname.endsWith('/whoami')) {
+        const id = getServerIdFromNestedPath(requestUrl.pathname, '/whoami');
+        const servers = await readServers(dataFile, { registerSelf, requestUrl, whoamiPath });
+        const server = servers.find((candidate) => candidate.id === id);
+
+        if (!server) {
+          return sendJson(res, 404, { error: 'Server not found.' });
+        }
+
+        const details = await fetchWhoamiDetails(server);
+        return sendJson(res, 200, details);
+      }
+
       if (req.method === 'POST' && requestUrl.pathname === '/api/servers') {
         const server = validateServer(await readJsonBody(req));
         const servers = await readServers(dataFile, { registerSelf, requestUrl, whoamiPath });
@@ -153,6 +166,46 @@ function buildSelfServer(requestUrl, whoamiPath = DEFAULT_WHOAMI_PATH) {
 async function writeServers(dataFile, servers) {
   await fs.mkdir(path.dirname(dataFile), { recursive: true });
   await fs.writeFile(dataFile, `${JSON.stringify(servers, null, 2)}\n`);
+}
+
+function getServerIdFromNestedPath(pathname, suffix) {
+  return decodeURIComponent(pathname.slice('/api/servers/'.length, -suffix.length));
+}
+
+async function fetchWhoamiDetails(server) {
+  let response;
+  try {
+    response = await fetch(server.whoamiUrl, {
+      cache: 'no-store',
+      headers: whoamiAuthHeaders(server),
+    });
+  } catch (error) {
+    const fetchError = new Error(`Unable to reach whoami endpoint: ${error.message}`);
+    fetchError.statusCode = 502;
+    throw fetchError;
+  }
+
+  if (!response.ok) {
+    const error = new Error(`Whoami endpoint returned HTTP ${response.status}.`);
+    error.statusCode = 502;
+    throw error;
+  }
+
+  try {
+    return await response.json();
+  } catch (error) {
+    const parseError = new Error('Whoami endpoint did not return valid JSON.');
+    parseError.statusCode = 502;
+    throw parseError;
+  }
+}
+
+function whoamiAuthHeaders(server) {
+  if (!server.whoamiUsername && !server.whoamiPassword) return {};
+
+  return {
+    Authorization: `Basic ${Buffer.from(`${server.whoamiUsername || ''}:${server.whoamiPassword || ''}`).toString('base64')}`,
+  };
 }
 
 function validateServer(input) {

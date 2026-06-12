@@ -102,6 +102,52 @@ test('API stores and updates servers in a JSON file', async () => {
   }
 });
 
+test('server whoami proxy fetches basic-auth protected endpoints without browser preflight', async () => {
+  const upstream = http.createServer((req, res) => {
+    if (req.method === 'OPTIONS') {
+      res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="whoami"' });
+      return res.end();
+    }
+
+    if (req.headers.authorization !== `Basic ${Buffer.from('monitor:secret').toString('base64')}`) {
+      res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="whoami"' });
+      return res.end(JSON.stringify({ error: 'Unauthorized' }));
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ service: 'protected whoami', cpus: 4, memoryGb: 16, storageGb: 128 }));
+  });
+
+  const upstreamBaseUrl = await new Promise((resolve) => {
+    upstream.listen(0, () => resolve(`http://127.0.0.1:${upstream.address().port}`));
+  });
+
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'server-dashboard-'));
+  const dataFile = path.join(directory, 'servers.json');
+  await fs.writeFile(dataFile, JSON.stringify([{
+    id: 'protected-node',
+    name: 'Protected node',
+    ipAddress: '10.0.0.30',
+    host: 'protected.local',
+    whoamiUrl: `${upstreamBaseUrl}/whoami`,
+    whoamiUsername: 'monitor',
+    whoamiPassword: 'secret',
+  }]));
+  const { server, baseUrl } = await listen(createApp({ dataFile, registerSelf: false }));
+
+  try {
+    const proxiedResponse = await fetch(`${baseUrl}/api/servers/protected-node/whoami`);
+    const proxied = await proxiedResponse.json();
+
+    assert.equal(proxiedResponse.status, 200);
+    assert.equal(proxied.service, 'protected whoami');
+    assert.equal(proxied.cpus, 4);
+  } finally {
+    server.close();
+    upstream.close();
+  }
+});
+
 test('dashboard mode exposes whoami and can register itself by default', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'server-dashboard-'));
   const dataFile = path.join(directory, 'servers.json');
