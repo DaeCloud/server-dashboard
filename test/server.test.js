@@ -27,10 +27,14 @@ test('validateServer accepts required fields and normalizes the whoami URL', () 
     ipAddress: '10.0.0.1',
     host: 'api.local',
     whoamiUrl: 'https://api.local/whoami',
+    whoamiUsername: ' monitor ',
+    whoamiPassword: ' secret ',
   });
 
   assert.equal(server.name, 'API');
   assert.equal(server.whoamiUrl, 'https://api.local/whoami');
+  assert.equal(server.whoamiUsername, 'monitor');
+  assert.equal(server.whoamiPassword, ' secret ');
 });
 
 test('validateServer rejects invalid whoami URLs', () => {
@@ -56,12 +60,16 @@ test('API stores and updates servers in a JSON file', async () => {
         ipAddress: '10.0.0.20',
         host: 'db.local',
         whoamiUrl: 'http://db.local/whoami',
+        whoamiUsername: 'nginx-user',
+        whoamiPassword: 'nginx-password',
       }),
     });
     const created = await createdResponse.json();
 
     assert.equal(createdResponse.status, 201);
     assert.equal(created.name, 'Database');
+    assert.equal(created.whoamiUsername, 'nginx-user');
+    assert.equal(created.whoamiPassword, 'nginx-password');
 
     const updatedResponse = await fetch(`${baseUrl}/api/servers/${created.id}`, {
       method: 'PUT',
@@ -71,6 +79,8 @@ test('API stores and updates servers in a JSON file', async () => {
         ipAddress: '10.0.0.21',
         host: 'db-primary.local',
         whoamiUrl: 'http://db-primary.local/whoami',
+        whoamiUsername: 'primary-user',
+        whoamiPassword: 'primary-password',
       }),
     });
     const updated = await updatedResponse.json();
@@ -82,6 +92,8 @@ test('API stores and updates servers in a JSON file', async () => {
     assert.equal(listedResponse.status, 200);
     assert.equal(listed.length, 1);
     assert.equal(listed[0].host, 'db-primary.local');
+    assert.equal(listed[0].whoamiUsername, 'primary-user');
+    assert.equal(listed[0].whoamiPassword, 'primary-password');
 
     const stored = JSON.parse(await fs.readFile(dataFile, 'utf8'));
     assert.equal(stored[0].id, created.id);
@@ -120,6 +132,13 @@ test('whoami mode serves only the provider endpoint and disables dashboard APIs'
     const whoami = await whoamiResponse.json();
     assert.equal(whoamiResponse.status, 200);
     assert.equal(whoami.mode, 'whoami');
+
+    const optionsResponse = await fetch(`${baseUrl}/whoami`, {
+      method: 'OPTIONS',
+      headers: { 'Access-Control-Request-Headers': 'authorization' },
+    });
+    assert.equal(optionsResponse.status, 204);
+    assert.match(optionsResponse.headers.get('access-control-allow-headers'), /Authorization/);
 
     const apiResponse = await fetch(`${baseUrl}/api/servers`);
     assert.equal(apiResponse.status, 404);
