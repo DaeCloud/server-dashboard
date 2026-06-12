@@ -10,7 +10,7 @@ A polished, JSON-backed web dashboard for tracking servers and their capacity at
 - Persist server inventory in `data/servers.json` as plain JSON; mount `/app/data` or set `DATA_FILE` to durable storage in Docker.
 - Fetch whoami endpoints from the browser to show online/offline status.
 - Summarize servers up, total CPUs, total memory, and total storage.
-- Display each server as a responsive glassmorphism card.
+- Display servers in a data-dense table or compact card view, with subtle edit/delete actions.
 
 ## Modes
 

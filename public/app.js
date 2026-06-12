@@ -1,10 +1,15 @@
+const VIEW_MODE_KEY = 'server-dashboard:view-mode';
+
 const state = {
   servers: [],
   details: new Map(),
   editingServerId: '',
+  viewMode: localStorage.getItem(VIEW_MODE_KEY) === 'cards' ? 'cards' : 'table',
 };
 
 const elements = {
+  tableWrap: document.querySelector('#table-wrap'),
+  tableBody: document.querySelector('#server-table-body'),
   grid: document.querySelector('#server-grid'),
   empty: document.querySelector('#empty-state'),
   dialog: document.querySelector('#server-dialog'),
@@ -16,7 +21,10 @@ const elements = {
   openAddServer: document.querySelector('#open-add-server'),
   closeDialog: document.querySelector('#close-dialog'),
   refresh: document.querySelector('#refresh'),
+  tableView: document.querySelector('#table-view'),
+  cardView: document.querySelector('#card-view'),
   serversUp: document.querySelector('#servers-up'),
+  serversDown: document.querySelector('#servers-down'),
   totalCpus: document.querySelector('#total-cpus'),
   totalMemory: document.querySelector('#total-memory'),
   totalStorage: document.querySelector('#total-storage'),
@@ -32,6 +40,9 @@ async function loadServers() {
 }
 
 async function refreshWhoamiDetails() {
+  elements.refresh.disabled = true;
+  elements.refresh.textContent = 'Refreshing';
+
   await Promise.all(state.servers.map(async (server) => {
     state.details.set(server.id, { status: 'loading' });
     render();
@@ -48,8 +59,10 @@ async function refreshWhoamiDetails() {
     }
     render();
   }));
-}
 
+  elements.refresh.disabled = false;
+  elements.refresh.innerHTML = '<span aria-hidden="true">Refresh</span><span class="sr-only">Refresh whoami data</span>';
+}
 
 function normalizeDetails(details) {
   const memory = findNumberWithPath(details, [
@@ -166,13 +179,16 @@ function clampPercent(value) {
 
 function render() {
   renderSummary();
+  renderViewMode();
   elements.empty.classList.toggle('visible', state.servers.length === 0);
+  elements.tableBody.innerHTML = state.servers.map(renderTableRow).join('');
   elements.grid.innerHTML = state.servers.map(renderCard).join('');
 }
 
 function renderSummary() {
   const details = state.servers.map((server) => state.details.get(server.id) || { status: 'loading' });
   const upCount = details.filter((detail) => detail.status === 'up').length;
+  const downCount = details.filter((detail) => detail.status === 'down').length;
   const totals = details.reduce((acc, detail) => {
     if (detail.status !== 'up') return acc;
     acc.cpus += detail.cpus || 0;
@@ -182,52 +198,106 @@ function renderSummary() {
   }, { cpus: 0, memoryGb: 0, storageGb: 0 });
 
   elements.serversUp.textContent = `${upCount} / ${state.servers.length}`;
+  elements.serversDown.textContent = numberFormatter.format(downCount);
   elements.totalCpus.textContent = numberFormatter.format(totals.cpus);
   elements.totalMemory.textContent = `${numberFormatter.format(totals.memoryGb)} GB`;
   elements.totalStorage.textContent = `${numberFormatter.format(totals.storageGb)} GB`;
 }
 
+function renderViewMode() {
+  const showCards = state.viewMode === 'cards';
+  elements.tableWrap.hidden = showCards || state.servers.length === 0;
+  elements.grid.hidden = !showCards || state.servers.length === 0;
+  elements.tableView.setAttribute('aria-pressed', String(!showCards));
+  elements.cardView.setAttribute('aria-pressed', String(showCards));
+}
+
+function renderTableRow(server) {
+  const detail = state.details.get(server.id) || { status: 'loading' };
+  const storagePercent = Math.round(detail.storageUsedPercent || 0);
+  const selfBadge = server.isSelf ? '<span class="self-badge">Dashboard</span>' : '';
+  const error = detail.error ? `<div class="inline-error">${escapeHtml(detail.error)}</div>` : '';
+
+  return `
+    <tr>
+      <td>${renderStatus(detail)}</td>
+      <td>
+        <div class="server-identity">
+          <div class="server-title-row">
+            <span class="server-name">${escapeHtml(server.name)}</span>
+            ${selfBadge}
+          </div>
+          ${error}
+        </div>
+      </td>
+      <td class="truncate-cell" title="${escapeAttribute(server.host)}">${escapeHtml(server.host)}</td>
+      <td class="nowrap">${escapeHtml(server.ipAddress)}</td>
+      <td class="truncate-cell" title="${escapeAttribute(detail.os || 'Pending')}">${escapeHtml(detail.os || 'Pending')}</td>
+      <td class="nowrap">${metric(detail.cpus)}</td>
+      <td class="nowrap">${metric(detail.memoryGb, ' GB')}</td>
+      <td class="storage-cell">${renderStorageValue(detail, storagePercent)}</td>
+      <td>
+        <div class="row-actions">
+          <a class="table-link" href="${escapeAttribute(server.whoamiUrl)}" target="_blank" rel="noreferrer">Open</a>
+          <button class="quiet-action" type="button" data-edit-id="${escapeAttribute(server.id)}">Edit</button>
+          <button class="quiet-action delete-button" type="button" data-delete-id="${escapeAttribute(server.id)}">Delete</button>
+        </div>
+      </td>
+    </tr>`;
+}
+
 function renderCard(server) {
   const detail = state.details.get(server.id) || { status: 'loading' };
-  const statusClass = detail.status === 'up' ? 'status-up' : detail.status === 'down' ? 'status-down' : 'status-loading';
-  const statusLabel = detail.status === 'up' ? 'Online' : detail.status === 'down' ? 'Offline' : 'Checking';
   const selfBadge = server.isSelf ? '<span class="self-badge">Dashboard</span>' : '';
   const storagePercent = Math.round(detail.storageUsedPercent || 0);
 
   return `
     <article class="server-card">
-      <div class="card-content">
-        <div class="card-top">
-          <div>
-            <div class="server-title-row">
-              <h3 class="server-name">${escapeHtml(server.name)}</h3>
-              ${selfBadge}
-            </div>
-            <p class="server-host">${escapeHtml(server.host)}</p>
+      <div class="card-top">
+        <div>
+          <div class="server-title-row">
+            <h3 class="server-name">${escapeHtml(server.name)}</h3>
+            ${selfBadge}
           </div>
-          <span class="status-pill ${statusClass}"><span class="status-dot"></span>${statusLabel}</span>
+          <p class="server-host">${escapeHtml(server.host)}</p>
         </div>
-        <div class="meta">
-          <div class="meta-row"><span>IP address</span><strong>${escapeHtml(server.ipAddress)}</strong></div>
-          <div class="meta-row"><span>Operating system</span><strong>${escapeHtml(detail.os || 'Pending')}</strong></div>
-        </div>
-        <div class="metric-grid">
-          <div class="metric"><span>CPUs</span><strong>${metric(detail.cpus)}</strong></div>
-          <div class="metric"><span>Memory</span><strong>${metric(detail.memoryGb, ' GB')}</strong></div>
-          <div class="metric storage-metric">
-            <span>Storage</span>
-            <strong>${metric(detail.storageGb, ' GB')}</strong>
-            ${renderStorageUsage(detail, storagePercent)}
-          </div>
-        </div>
-        ${detail.error ? `<p class="form-error">${escapeHtml(detail.error)}</p>` : ''}
-        <div class="card-actions">
-          <a class="card-link" href="${escapeAttribute(server.whoamiUrl)}" target="_blank" rel="noreferrer">Open whoami</a>
-          <button class="edit-button" type="button" data-edit-id="${escapeAttribute(server.id)}">Edit</button>
-          <button class="delete-button" type="button" data-delete-id="${escapeAttribute(server.id)}">Remove</button>
+        ${renderStatus(detail)}
+      </div>
+      <div class="meta">
+        <div class="meta-row"><span>IP address</span><strong>${escapeHtml(server.ipAddress)}</strong></div>
+        <div class="meta-row"><span>Operating system</span><strong>${escapeHtml(detail.os || 'Pending')}</strong></div>
+      </div>
+      <div class="metric-grid">
+        <div class="metric"><span>CPU</span><strong>${metric(detail.cpus)}</strong></div>
+        <div class="metric"><span>Memory</span><strong>${metric(detail.memoryGb, ' GB')}</strong></div>
+        <div class="metric">
+          <span>Storage</span>
+          <strong>${metric(detail.storageGb, ' GB')}</strong>
         </div>
       </div>
+      ${renderStorageUsage(detail, storagePercent)}
+      ${detail.error ? `<p class="inline-error">${escapeHtml(detail.error)}</p>` : ''}
+      <div class="card-actions">
+        <a class="table-link" href="${escapeAttribute(server.whoamiUrl)}" target="_blank" rel="noreferrer">Open</a>
+        <button class="quiet-action" type="button" data-edit-id="${escapeAttribute(server.id)}">Edit</button>
+        <button class="quiet-action delete-button" type="button" data-delete-id="${escapeAttribute(server.id)}">Delete</button>
+      </div>
     </article>`;
+}
+
+function renderStatus(detail) {
+  const statusClass = detail.status === 'up' ? 'status-up' : detail.status === 'down' ? 'status-down' : 'status-loading';
+  const statusLabel = detail.status === 'up' ? 'Online' : detail.status === 'down' ? 'Offline' : 'Checking';
+  return `<span class="status-pill ${statusClass}"><span class="status-dot" aria-hidden="true"></span>${statusLabel}</span>`;
+}
+
+function renderStorageValue(detail, storagePercent) {
+  if (detail.status !== 'up' || !detail.storageGb) return metric(detail.storageGb, ' GB');
+  return `
+    <div>
+      <strong>${metric(detail.storageGb, ' GB')}</strong>
+      ${renderStorageUsage(detail, storagePercent)}
+    </div>`;
 }
 
 function renderStorageUsage(detail, storagePercent) {
@@ -273,6 +343,12 @@ function openServerDialog(server = null) {
   elements.dialog.showModal();
 }
 
+function setViewMode(viewMode) {
+  state.viewMode = viewMode;
+  localStorage.setItem(VIEW_MODE_KEY, viewMode);
+  render();
+}
+
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 }
@@ -284,10 +360,14 @@ function escapeAttribute(value) {
 elements.openAddServer.addEventListener('click', () => openServerDialog());
 elements.closeDialog.addEventListener('click', () => elements.dialog.close());
 elements.refresh.addEventListener('click', refreshWhoamiDetails);
+elements.tableView.addEventListener('click', () => setViewMode('table'));
+elements.cardView.addEventListener('click', () => setViewMode('cards'));
 
 elements.form.addEventListener('submit', async (event) => {
   event.preventDefault();
   elements.formError.textContent = '';
+  elements.submitServer.disabled = true;
+  elements.submitServer.textContent = state.editingServerId ? 'Saving changes' : 'Saving server';
 
   const payload = Object.fromEntries(new FormData(elements.form));
   const isEditing = Boolean(state.editingServerId);
@@ -297,19 +377,23 @@ elements.form.addEventListener('submit', async (event) => {
     body: JSON.stringify(payload),
   });
 
+  elements.submitServer.disabled = false;
+
   if (!response.ok) {
     const result = await response.json();
     elements.formError.textContent = result.error || 'Unable to save server.';
+    elements.submitServer.textContent = isEditing ? 'Save changes' : 'Save server';
     return;
   }
 
   elements.form.reset();
   state.editingServerId = '';
   elements.dialog.close();
+  elements.submitServer.textContent = 'Save server';
   await loadServers();
 });
 
-elements.grid.addEventListener('click', async (event) => {
+document.addEventListener('click', async (event) => {
   const editButton = event.target.closest('[data-edit-id]');
   if (editButton) {
     const server = state.servers.find((candidate) => candidate.id === editButton.dataset.editId);

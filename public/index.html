@@ -11,45 +11,84 @@
   </head>
   <body>
     <main class="shell">
-      <section class="hero">
-        <div>
+      <header class="app-header">
+        <div class="title-block">
           <p class="eyebrow">Fleet Command</p>
           <h1>Server Dashboard</h1>
-          <p class="hero-copy">Monitor availability and capacity for every server from one polished dashboard that can also run as a whoami provider.</p>
+          <p class="header-copy">Monitor availability and capacity for every server from one operational view.</p>
         </div>
-        <button class="primary-action" id="open-add-server" type="button">+ Add server</button>
-      </section>
+        <div class="toolbar" aria-label="Dashboard actions">
+          <button class="secondary-action" id="refresh" type="button">
+            <span aria-hidden="true">Refresh</span>
+            <span class="sr-only">Refresh whoami data</span>
+          </button>
+          <button class="primary-action" id="open-add-server" type="button">Add server</button>
+        </div>
+      </header>
 
       <section class="summary-grid" aria-label="Server summary">
-        <article class="summary-card up">
-          <span class="summary-label">Servers up</span>
+        <article class="summary-card summary-online">
+          <span class="summary-label">Online</span>
           <strong id="servers-up">0 / 0</strong>
         </article>
+        <article class="summary-card summary-offline">
+          <span class="summary-label">Offline</span>
+          <strong id="servers-down">0</strong>
+        </article>
         <article class="summary-card">
-          <span class="summary-label">Total CPUs</span>
+          <span class="summary-label">CPU cores</span>
           <strong id="total-cpus">0</strong>
         </article>
         <article class="summary-card">
-          <span class="summary-label">Total memory</span>
+          <span class="summary-label">Memory</span>
           <strong id="total-memory">0 GB</strong>
         </article>
         <article class="summary-card">
-          <span class="summary-label">Total storage</span>
+          <span class="summary-label">Storage</span>
           <strong id="total-storage">0 GB</strong>
         </article>
       </section>
 
-      <section class="panel">
+      <section class="panel" aria-labelledby="inventory-title">
         <div class="panel-heading">
           <div>
             <p class="eyebrow">Inventory</p>
-            <h2>Your servers</h2>
+            <h2 id="inventory-title">Your servers</h2>
           </div>
-          <button class="secondary-action" id="refresh" type="button">Refresh whoami data</button>
+          <div class="view-switcher" role="group" aria-label="Inventory view">
+            <button class="view-button" id="table-view" type="button" data-view="table" aria-pressed="true">Table</button>
+            <button class="view-button" id="card-view" type="button" data-view="cards" aria-pressed="false">Cards</button>
+          </div>
         </div>
-        <div class="server-grid" id="server-grid"></div>
+
+        <div class="table-wrap" id="table-wrap">
+          <table class="server-table">
+            <thead>
+              <tr>
+                <th scope="col">Status</th>
+                <th scope="col">Server</th>
+                <th scope="col">Host</th>
+                <th scope="col">IP</th>
+                <th scope="col">OS</th>
+                <th scope="col">CPU</th>
+                <th scope="col">Memory</th>
+                <th scope="col">Storage</th>
+                <th scope="col" class="actions-column">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="server-table-body"></tbody>
+          </table>
+        </div>
+
+        <div class="server-grid" id="server-grid" hidden></div>
+
         <div class="empty-state" id="empty-state">
-          <div class="empty-icon">⌁</div>
+          <div class="empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" focusable="false">
+              <path d="M5 7.5h14M5 12h14M5 16.5h14" />
+              <path d="M7.5 4.5h9a2.5 2.5 0 0 1 2.5 2.5v10a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 17V7a2.5 2.5 0 0 1 2.5-2.5Z" />
+            </svg>
+          </div>
           <h3>No servers yet</h3>
           <p>Add your first server and connect a whoami endpoint to populate live details.</p>
         </div>
@@ -63,7 +102,11 @@
             <p class="eyebrow" id="dialog-eyebrow">New node</p>
             <h2 id="dialog-title">Add server</h2>
           </div>
-          <button class="icon-button" id="close-dialog" aria-label="Close add server dialog" type="button">×</button>
+          <button class="icon-button" id="close-dialog" aria-label="Close add server dialog" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
         </div>
 
         <label>
@@ -91,7 +134,7 @@
           </label>
           <label>
             <span>Password</span>
-            <input name="whoamiPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
+            <input name="whoamiPassword" type="password" placeholder="Password" autocomplete="current-password" />
           </label>
         </fieldset>
 
