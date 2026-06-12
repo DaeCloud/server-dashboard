@@ -148,6 +148,32 @@ test('server whoami proxy fetches basic-auth protected endpoints without browser
   }
 });
 
+test('self server whoami is served locally instead of proxying through its stored URL', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'server-dashboard-'));
+  const dataFile = path.join(directory, 'servers.json');
+  await fs.writeFile(dataFile, JSON.stringify([{
+    id: SELF_SERVER_ID,
+    isSelf: true,
+    name: 'Dashboard',
+    ipAddress: '127.0.0.1',
+    host: 'dashboard.local',
+    whoamiUrl: 'http://127.0.0.1:1/whoami',
+  }]));
+  const { server, baseUrl } = await listen(createApp({ dataFile, registerSelf: true }));
+
+  try {
+    const response = await fetch(`${baseUrl}/api/servers/${SELF_SERVER_ID}/whoami`);
+    const details = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(details.service, 'server-dashboard whoami');
+    assert.equal(details.mode, 'dashboard');
+    assert.ok(details.cpus >= 1);
+  } finally {
+    server.close();
+  }
+});
+
 test('dashboard mode exposes whoami and can register itself by default', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'server-dashboard-'));
   const dataFile = path.join(directory, 'servers.json');
