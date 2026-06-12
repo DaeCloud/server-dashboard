@@ -51,7 +51,7 @@ function createApp(options = {}) {
           return sendJson(res, 404, { error: 'Server not found.' });
         }
 
-        const details = await fetchWhoamiDetails(server);
+        const details = await resolveWhoamiDetails(server, { mode, whoamiPath });
         return sendJson(res, 200, details);
       }
 
@@ -170,6 +170,18 @@ async function writeServers(dataFile, servers) {
 
 function getServerIdFromNestedPath(pathname, suffix) {
   return decodeURIComponent(pathname.slice('/api/servers/'.length, -suffix.length));
+}
+
+async function resolveWhoamiDetails(server, options = {}) {
+  if (isSelfServer(server)) {
+    return getWhoamiDetails(options);
+  }
+
+  return fetchWhoamiDetails(server);
+}
+
+function isSelfServer(server) {
+  return server?.id === SELF_SERVER_ID || server?.isSelf === true;
 }
 
 async function fetchWhoamiDetails(server) {
