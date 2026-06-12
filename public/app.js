@@ -37,7 +37,10 @@ async function refreshWhoamiDetails() {
     render();
 
     try {
-      const response = await fetch(server.whoamiUrl, { cache: 'no-store' });
+      const response = await fetch(server.whoamiUrl, {
+        cache: 'no-store',
+        headers: whoamiAuthHeaders(server),
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const details = await response.json();
       state.details.set(server.id, normalizeDetails(details));
@@ -46,6 +49,19 @@ async function refreshWhoamiDetails() {
     }
     render();
   }));
+}
+
+
+function whoamiAuthHeaders(server) {
+  if (!server.whoamiUsername && !server.whoamiPassword) return {};
+
+  return {
+    Authorization: `Basic ${base64Encode(`${server.whoamiUsername || ''}:${server.whoamiPassword || ''}`)}`,
+  };
+}
+
+function base64Encode(value) {
+  return btoa(unescape(encodeURIComponent(value)));
 }
 
 function normalizeDetails(details) {
@@ -259,6 +275,8 @@ function openServerDialog(server = null) {
     elements.form.elements.ipAddress.value = server.ipAddress;
     elements.form.elements.host.value = server.host;
     elements.form.elements.whoamiUrl.value = server.whoamiUrl;
+    elements.form.elements.whoamiUsername.value = server.whoamiUsername || '';
+    elements.form.elements.whoamiPassword.value = server.whoamiPassword || '';
   } else {
     elements.dialogEyebrow.textContent = 'New node';
     elements.dialogTitle.textContent = 'Add server';

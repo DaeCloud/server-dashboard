@@ -6,8 +6,8 @@ A polished, JSON-backed web dashboard for tracking servers and their capacity at
 
 - Run as a full dashboard or a whoami-only provider with `APP_MODE`.
 - Dashboard mode also exposes its own `/whoami` endpoint and registers itself in the inventory by default.
-- Add, edit, and remove servers with a name, IP address, host, and whoami endpoint URL.
-- Persist server inventory in `data/servers.json` as plain JSON.
+- Add, edit, and remove servers with a name, IP address, host, whoami endpoint URL, and optional basic auth credentials for endpoints protected by nginx or another reverse proxy.
+- Persist server inventory in `data/servers.json` as plain JSON; mount `/app/data` or set `DATA_FILE` to durable storage in Docker.
 - Fetch whoami endpoints from the browser to show online/offline status.
 - Summarize servers up, total CPUs, total memory, and total storage.
 - Display each server as a responsive glassmorphism card.
@@ -35,6 +35,8 @@ Set `APP_MODE` (or `SERVICE_MODE`) to choose what the container does:
 | `SELF_IP_ADDRESS`, `WHOAMI_IP_ADDRESS` | first non-internal IPv4 | IP address used for the auto-registered dashboard server and/or whoami payload. |
 | `SELF_ORIGIN`, `DASHBOARD_ORIGIN` | request origin | Public origin used to build the dashboard's default self whoami URL. Useful behind reverse proxies. |
 | `SELF_WHOAMI_URL`, `WHOAMI_URL` | derived from origin + path | Explicit self whoami URL for the dashboard inventory. |
+| `SELF_WHOAMI_USERNAME`, `WHOAMI_USERNAME` | empty | Optional basic auth username saved for the dashboard's auto-registered self whoami URL. |
+| `SELF_WHOAMI_PASSWORD`, `WHOAMI_PASSWORD` | empty | Optional basic auth password saved for the dashboard's auto-registered self whoami URL. |
 | `WHOAMI_STORAGE_PATH` | `/` | Filesystem path used to calculate storage totals. |
 
 ## Whoami response shape
@@ -75,7 +77,7 @@ Run as a whoami-only provider:
 APP_MODE=whoami PORT=3001 SERVER_NAME=api-01 npm start
 ```
 
-Then add `http://localhost:3001/whoami` to the dashboard.
+Then add `http://localhost:3001/whoami` to the dashboard. If that endpoint is behind nginx basic auth, fill in the optional username and password fields when adding or editing the server. Credentials are stored in the dashboard JSON inventory, so protect the data volume accordingly.
 
 ## Docker
 
@@ -85,28 +87,29 @@ Build the image:
 docker build -t server-dashboard .
 ```
 
-Run the dashboard with persistent inventory:
+Run the dashboard with persistent inventory. The named volume keeps `/app/data/servers.json` across container restarts and image upgrades:
 
 ```bash
 docker run --rm -p 3000:3000 \
   -e APP_MODE=dashboard \
   -e SERVER_NAME="Dashboard host" \
   -e SELF_ORIGIN=http://localhost:3000 \
-  -v server-dashboard-data:/app/data \
+  --mount type=volume,source=server-dashboard-data,target=/app/data \
   server-dashboard
 ```
 
-Run a whoami provider on another server:
+Run a whoami provider on another server. Mount a data volume as well so any future file-backed settings and local container data survive recreation:
 
 ```bash
 docker run --rm -p 3001:3000 \
   -e APP_MODE=whoami \
   -e SERVER_NAME="API host" \
   -e WHOAMI_HOST=api-01.example.com \
+  --mount type=volume,source=server-dashboard-whoami-data,target=/app/data \
   server-dashboard
 ```
 
-Add `http://<provider-host>:3001/whoami` to the dashboard inventory.
+Add `http://<provider-host>:3001/whoami` to the dashboard inventory. If nginx basic auth is in front of that URL, enter the nginx username and password in the optional basic auth fields. The dashboard sends them as an `Authorization: Basic ...` header when refreshing whoami data.
 
 ## Test
 

@@ -145,6 +145,8 @@ function buildSelfServer(requestUrl, whoamiPath = DEFAULT_WHOAMI_PATH) {
     ipAddress: getEnv('SELF_IP_ADDRESS', 'WHOAMI_IP_ADDRESS') || firstPrivateAddress() || '127.0.0.1',
     host: getEnv('SELF_HOST', 'WHOAMI_HOST') || os.hostname(),
     whoamiUrl,
+    whoamiUsername: getEnv('SELF_WHOAMI_USERNAME', 'WHOAMI_USERNAME'),
+    whoamiPassword: getEnv('SELF_WHOAMI_PASSWORD', 'WHOAMI_PASSWORD'),
   };
 }
 
@@ -183,6 +185,8 @@ function validateServer(input) {
     ipAddress: String(input.ipAddress).trim(),
     host: String(input.host).trim(),
     whoamiUrl: whoamiUrl.toString(),
+    whoamiUsername: String(input.whoamiUsername || '').trim(),
+    whoamiPassword: String(input.whoamiPassword || ''),
   };
 }
 
@@ -322,7 +326,7 @@ function sendWhoamiOptions(res) {
   res.writeHead(204, {
     ...whoamiHeaders(),
     'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
   });
   res.end();
