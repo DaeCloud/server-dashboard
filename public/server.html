@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Server details · Server Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell detail-shell">
+      <nav class="detail-nav" aria-label="Breadcrumb">
+        <a href="/">Server dashboard</a><span aria-hidden="true">/</span><span id="breadcrumb-name">Server</span>
+      </nav>
+
+      <header class="detail-header">
+        <div>
+          <p class="eyebrow">Server detail</p>
+          <div class="detail-title-row">
+            <h1 id="server-name">Loading server</h1>
+            <span id="server-status" class="status-pill status-loading"><span class="status-dot" aria-hidden="true"></span>Checking</span>
+          </div>
+          <p class="header-copy" id="server-address">Retrieving host information…</p>
+        </div>
+        <div class="toolbar">
+          <a class="secondary-action detail-action" id="whoami-link" href="#" target="_blank" rel="noreferrer">Open whoami</a>
+          <button class="primary-action" id="refresh-detail" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <section class="detail-meta panel" aria-label="Host details">
+        <div><span>Operating system</span><strong id="host-os">—</strong></div>
+        <div><span>CPU cores</span><strong id="host-cpus">—</strong></div>
+        <div><span>Memory</span><strong id="host-memory">—</strong></div>
+        <div><span>Storage</span><strong id="host-storage">—</strong></div>
+      </section>
+
+      <section class="detail-section" aria-labelledby="docker-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Runtime</p>
+            <h2 id="docker-title">Docker engine</h2>
+          </div>
+          <span id="docker-status" class="status-pill status-loading"><span class="status-dot" aria-hidden="true"></span>Checking</span>
+        </div>
+        <div id="docker-error" class="detail-error" role="alert" hidden></div>
+        <div class="docker-kpi-grid" id="docker-kpis" aria-live="polite"></div>
+        <div class="engine-meta panel" id="engine-meta" hidden></div>
+      </section>
+
+      <section class="panel container-panel" aria-labelledby="containers-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Workloads</p>
+            <h2 id="containers-title">Containers</h2>
+          </div>
+          <span class="container-count" id="container-count">Loading</span>
+        </div>
+        <div class="table-wrap">
+          <table class="server-table container-table">
+            <thead><tr><th>Name</th><th>State</th><th>Health</th><th>Image</th><th>Stack</th><th>Status</th><th>Ports</th></tr></thead>
+            <tbody id="container-table-body"><tr><td colspan="7" class="loading-cell">Loading container inventory…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script src="/server-detail.js" defer></script>
+  </body>
+</html>

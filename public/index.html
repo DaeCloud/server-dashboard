@@ -20,7 +20,7 @@
         <div class="toolbar" aria-label="Dashboard actions">
           <button class="secondary-action" id="refresh" type="button">
             <span aria-hidden="true">Refresh</span>
-            <span class="sr-only">Refresh whoami data</span>
+            <span class="sr-only">Refresh server and Docker data</span>
           </button>
           <button class="primary-action" id="open-add-server" type="button">Add server</button>
         </div>
@@ -73,6 +73,7 @@
                 <th scope="col">CPU</th>
                 <th scope="col">Memory</th>
                 <th scope="col">Storage</th>
+                <th scope="col">Docker</th>
                 <th scope="col" class="actions-column">Actions</th>
               </tr>
             </thead>
@@ -124,6 +125,10 @@
         <label>
           <span>Whoami endpoint</span>
           <input name="whoamiUrl" type="url" placeholder="https://api-01.example.com/whoami" required />
+        </label>
+        <label>
+          <span>Docker base URL <small>(optional)</small></span>
+          <input name="dockerBaseUrl" type="url" placeholder="https://api-01.example.com/docker" />
         </label>
         <fieldset class="auth-fields">
           <legend>Optional basic auth</legend>

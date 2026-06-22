@@ -11,6 +11,7 @@ A polished, JSON-backed web dashboard for tracking servers and their capacity at
 - Fetch whoami endpoints from the browser to show online/offline status.
 - Summarize servers up, total CPUs, total memory, and total storage.
 - Display servers in a data-dense table or compact card view, with subtle edit/delete actions.
+- Show Docker engine, container, Compose stack, image, and volume counts for each server, with a dedicated container inventory page.
 
 ## Modes
 
@@ -38,6 +39,9 @@ Set `APP_MODE` (or `SERVICE_MODE`) to choose what the container does:
 | `SELF_WHOAMI_USERNAME`, `WHOAMI_USERNAME` | empty | Optional basic auth username saved for the dashboard's auto-registered self whoami URL. |
 | `SELF_WHOAMI_PASSWORD`, `WHOAMI_PASSWORD` | empty | Optional basic auth password saved for the dashboard's auto-registered self whoami URL. |
 | `WHOAMI_STORAGE_PATH` | `/` | Filesystem path used to calculate storage totals. |
+| `DOCKER_SOCKET_PATH` | `/var/run/docker.sock` | Unix socket used for read-only Docker monitoring requests. |
+| `DOCKER_PATH` | `/docker` | Provider base path for the Docker summary and container endpoints. |
+| `SELF_DOCKER_BASE_URL` | derived from request origin + Docker path | Public Docker endpoint for the auto-registered dashboard server. |
 
 ## Whoami response shape
 
@@ -62,6 +66,17 @@ The bundled whoami provider returns fields similar to this:
 ```
 
 The dashboard accepts several common field names when reading whoami JSON. Nested forms like `memory.total`, `storage.total`, `cpu.cores`, and `system.os` are also supported. Gigabyte fields such as `memoryGb`, `storageGb`, `memory.totalGb`, and `storage.totalGb` are treated as already converted values even when byte-based nested details are present.
+
+## Docker monitoring endpoints
+
+Both modes expose two deliberately narrow, read-only monitoring endpoints. `/whoami` remains unchanged.
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /docker/summary` | Engine version, host resources, container states and health, Compose project count, standalone containers, images, and volumes. |
+| `GET /docker/containers` | Normalized container names, images, state, health, status, ports, and Compose project. |
+
+The dashboard proxies these as `/api/servers/:id/docker/summary` and `/api/servers/:id/docker/containers`. A server can optionally store a custom Docker base URL; otherwise the dashboard uses `/docker` on its whoami URL's origin. The same optional basic-auth credentials are used for whoami and Docker requests.
 
 ## Run locally
 
@@ -95,6 +110,7 @@ docker run --rm -p 3000:3000 \
   -e SERVER_NAME="Dashboard host" \
   -e SELF_ORIGIN=http://localhost:3000 \
   --mount type=volume,source=server-dashboard-data,target=/app/data \
+  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock,readonly \
   server-dashboard
 ```
 
@@ -106,10 +122,13 @@ docker run --rm -p 3001:3000 \
   -e SERVER_NAME="API host" \
   -e WHOAMI_HOST=api-01.example.com \
   --mount type=volume,source=server-dashboard-whoami-data,target=/app/data \
+  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock,readonly \
   server-dashboard
 ```
 
 Add `http://<provider-host>:3001/whoami` to the dashboard inventory. If nginx basic auth is in front of that URL, enter the nginx username and password in the optional basic auth fields. The dashboard sends them as an `Authorization: Basic ...` header when refreshing whoami data.
+
+> **Security:** Access to the Docker socket is effectively host-level control of Docker. A `readonly` bind-mount protects the socket file from filesystem changes, but it does not make commands sent through the socket read-only. This service only implements fixed GET requests, but the container and its public endpoints must still be tightly protected. Consider a restricted Docker socket proxy for stronger isolation.
 
 ## Test
 

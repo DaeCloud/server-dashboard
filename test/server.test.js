@@ -7,9 +7,42 @@ const test = require('node:test');
 const {
   SELF_SERVER_ID,
   createApp,
+  getDockerContainers,
+  getDockerSummary,
   getWhoamiDetails,
   validateServer,
 } = require('../server');
+
+async function listenDockerSocket(handler) {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'server-dashboard-docker-'));
+  const socketPath = path.join(directory, 'docker.sock');
+  const server = http.createServer(handler);
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(socketPath, resolve);
+  });
+  return { server, socketPath };
+}
+
+function dockerFixture(req, res) {
+  const responses = {
+    '/version': { Version: '28.1.0', ApiVersion: '1.49' },
+    '/info': { Name: 'docker-host', NCPU: 8, MemTotal: 34359738368, OperatingSystem: 'Linux', Architecture: 'x86_64' },
+    '/containers/json?all=1': [
+      { Id: 'a'.repeat(64), Names: ['/web'], Image: 'nginx:latest', ImageID: 'sha256:1', State: 'running', Status: 'Up 2 hours (healthy)', Created: 1710000000, Labels: { 'com.docker.compose.project': 'frontend' }, Ports: [{ PrivatePort: 80, PublicPort: 8080, Type: 'tcp', IP: '0.0.0.0' }] },
+      { Id: 'b'.repeat(64), Names: ['/worker'], Image: 'worker:latest', State: 'running', Status: 'Up 1 hour (unhealthy)', Created: 1710000100, Labels: { 'com.docker.compose.project': 'jobs' }, Ports: [] },
+      { Id: 'c'.repeat(64), Names: ['/backup'], Image: 'backup:latest', State: 'exited', Status: 'Exited (0) 3 hours ago', Created: 1710000200, Labels: {}, Ports: [] },
+    ],
+    '/images/json': [{ Id: 'image-1' }, { Id: 'image-2' }],
+    '/volumes': { Volumes: [{ Name: 'data' }, { Name: 'backups' }, { Name: 'cache' }] },
+  };
+  if (!Object.hasOwn(responses, req.url)) {
+    res.writeHead(404);
+    return res.end('{}');
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(responses[req.url]));
+}
 
 function listen(app) {
   const server = http.createServer(app);
@@ -44,6 +77,98 @@ test('validateServer rejects invalid whoami URLs', () => {
     host: 'api.local',
     whoamiUrl: 'not-a-url',
   }), /valid URL/);
+});
+
+test('validateServer accepts an optional Docker base URL and rejects invalid protocols', () => {
+  const server = validateServer({
+    name: 'API', ipAddress: '10.0.0.1', host: 'api.local',
+    whoamiUrl: 'https://api.local/whoami', dockerBaseUrl: 'https://monitor.local/docker/',
+  });
+  assert.equal(server.dockerBaseUrl, 'https://monitor.local/docker');
+  assert.throws(() => validateServer({
+    name: 'API', ipAddress: '10.0.0.1', host: 'api.local',
+    whoamiUrl: 'https://api.local/whoami', dockerBaseUrl: 'file:///var/run/docker.sock',
+  }), /valid http or https URL/);
+});
+
+test('Docker socket adapter aggregates summaries and normalizes containers', async () => {
+  const docker = await listenDockerSocket(dockerFixture);
+  try {
+    const summary = await getDockerSummary({ socketPath: docker.socketPath });
+    assert.equal(summary.engine.version, '28.1.0');
+    assert.equal(summary.resources.cpus, 8);
+    assert.deepEqual(summary.containers, {
+      total: 3,
+      running: 2,
+      paused: 0,
+      stopped: 1,
+      states: { running: 2, exited: 1 },
+      health: { healthy: 1, unhealthy: 1, starting: 0 },
+    });
+    assert.equal(summary.stacks, 2);
+    assert.equal(summary.standaloneContainers, 1);
+    assert.equal(summary.images, 2);
+    assert.equal(summary.volumes, 3);
+
+    const inventory = await getDockerContainers({ socketPath: docker.socketPath });
+    assert.equal(inventory.containers[0].name, 'web');
+    assert.equal(inventory.containers[0].health, 'healthy');
+    assert.equal(inventory.containers[0].composeProject, 'frontend');
+    assert.equal(inventory.containers[0].ports[0].public, 8080);
+  } finally {
+    await new Promise((resolve) => docker.server.close(resolve));
+  }
+});
+
+test('Docker socket adapter returns a stable unavailable error for a missing socket', async () => {
+  await assert.rejects(
+    getDockerSummary({ socketPath: path.join(os.tmpdir(), `missing-${Date.now()}.sock`) }),
+    (error) => error.statusCode === 503 && error.code === 'docker_unavailable',
+  );
+});
+
+test('Docker socket adapter rejects malformed and non-success Engine responses', async () => {
+  const malformed = await listenDockerSocket((req, res) => res.end('{not-json'));
+  try {
+    await assert.rejects(
+      getDockerContainers({ socketPath: malformed.socketPath }),
+      (error) => error.statusCode === 503 && error.code === 'docker_invalid_response',
+    );
+  } finally {
+    await new Promise((resolve) => malformed.server.close(resolve));
+  }
+
+  const failed = await listenDockerSocket((req, res) => {
+    res.writeHead(500);
+    res.end('{}');
+  });
+  try {
+    await assert.rejects(
+      getDockerContainers({ socketPath: failed.socketPath }),
+      (error) => error.statusCode === 503 && error.code === 'docker_unavailable',
+    );
+  } finally {
+    await new Promise((resolve) => failed.server.close(resolve));
+  }
+});
+
+test('whoami mode exposes Docker monitoring endpoints without changing whoami', async () => {
+  const docker = await listenDockerSocket(dockerFixture);
+  const appServer = await listen(createApp({ mode: 'whoami', dockerSocketPath: docker.socketPath }));
+  try {
+    const whoamiResponse = await fetch(`${appServer.baseUrl}/whoami`);
+    const summaryResponse = await fetch(`${appServer.baseUrl}/docker/summary`);
+    const containersResponse = await fetch(`${appServer.baseUrl}/docker/containers`);
+    assert.equal(whoamiResponse.status, 200);
+    assert.equal((await whoamiResponse.json()).service, 'server-dashboard whoami');
+    assert.equal(summaryResponse.status, 200);
+    assert.equal((await summaryResponse.json()).containers.total, 3);
+    assert.equal(containersResponse.status, 200);
+    assert.equal((await containersResponse.json()).containers.length, 3);
+  } finally {
+    appServer.server.close();
+    await new Promise((resolve) => docker.server.close(resolve));
+  }
 });
 
 test('API stores and updates servers in a JSON file', async () => {
@@ -145,6 +270,54 @@ test('server whoami proxy fetches basic-auth protected endpoints without browser
   } finally {
     server.close();
     upstream.close();
+  }
+});
+
+test('server Docker proxy uses the configured base URL and existing basic auth', async () => {
+  const expectedAuth = `Basic ${Buffer.from('monitor:secret').toString('base64')}`;
+  const upstream = http.createServer((req, res) => {
+    if (req.url !== '/restricted/docker/summary' || req.headers.authorization !== expectedAuth) {
+      res.writeHead(401);
+      return res.end(JSON.stringify({ error: 'Unauthorized' }));
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ available: true, containers: { total: 7, running: 5 } }));
+  });
+  const upstreamBaseUrl = await new Promise((resolve) => upstream.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${upstream.address().port}`)));
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'server-dashboard-'));
+  const dataFile = path.join(directory, 'servers.json');
+  await fs.writeFile(dataFile, JSON.stringify([{
+    id: 'docker-node', name: 'Docker node', ipAddress: '10.0.0.31', host: 'docker.local',
+    whoamiUrl: `${upstreamBaseUrl}/whoami`, dockerBaseUrl: `${upstreamBaseUrl}/restricted/docker`,
+    whoamiUsername: 'monitor', whoamiPassword: 'secret',
+  }]));
+  const dashboard = await listen(createApp({ dataFile, registerSelf: false }));
+  try {
+    const response = await fetch(`${dashboard.baseUrl}/api/servers/docker-node/docker/summary`);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).containers.running, 5);
+  } finally {
+    dashboard.server.close();
+    upstream.close();
+  }
+});
+
+test('self server Docker proxy reads the local socket instead of its stored URL', async () => {
+  const docker = await listenDockerSocket(dockerFixture);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'server-dashboard-'));
+  const dataFile = path.join(directory, 'servers.json');
+  await fs.writeFile(dataFile, JSON.stringify([{
+    id: SELF_SERVER_ID, isSelf: true, name: 'Dashboard', ipAddress: '127.0.0.1',
+    host: 'dashboard.local', whoamiUrl: 'http://127.0.0.1:1/whoami', dockerBaseUrl: 'http://127.0.0.1:1/docker',
+  }]));
+  const dashboard = await listen(createApp({ dataFile, registerSelf: true, dockerSocketPath: docker.socketPath }));
+  try {
+    const response = await fetch(`${dashboard.baseUrl}/api/servers/${SELF_SERVER_ID}/docker/summary`);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).engine.name, 'docker-host');
+  } finally {
+    dashboard.server.close();
+    await new Promise((resolve) => docker.server.close(resolve));
   }
 });
 

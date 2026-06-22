@@ -3,6 +3,7 @@ const VIEW_MODE_KEY = 'server-dashboard:view-mode';
 const state = {
   servers: [],
   details: new Map(),
+  docker: new Map(),
   editingServerId: '',
   viewMode: localStorage.getItem(VIEW_MODE_KEY) === 'cards' ? 'cards' : 'table',
 };
@@ -45,23 +46,40 @@ async function refreshWhoamiDetails() {
 
   await Promise.all(state.servers.map(async (server) => {
     state.details.set(server.id, { status: 'loading' });
+    state.docker.set(server.id, { status: 'loading' });
     render();
 
-    try {
+    const whoamiRequest = (async () => {
+      try {
       const response = await fetch(`/api/servers/${encodeURIComponent(server.id)}/whoami`, {
         cache: 'no-store',
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const details = await response.json();
       state.details.set(server.id, normalizeDetails(details));
-    } catch (error) {
-      state.details.set(server.id, { status: 'down', error: error.message });
-    }
-    render();
+      } catch (error) {
+        state.details.set(server.id, { status: 'down', error: error.message });
+      }
+      render();
+    })();
+
+    const dockerRequest = (async () => {
+      try {
+        const response = await fetch(`/api/servers/${encodeURIComponent(server.id)}/docker/summary`, { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+        state.docker.set(server.id, { status: 'up', ...result });
+      } catch (error) {
+        state.docker.set(server.id, { status: 'down', error: error.message });
+      }
+      render();
+    })();
+
+    await Promise.all([whoamiRequest, dockerRequest]);
   }));
 
   elements.refresh.disabled = false;
-  elements.refresh.innerHTML = '<span aria-hidden="true">Refresh</span><span class="sr-only">Refresh whoami data</span>';
+  elements.refresh.innerHTML = '<span aria-hidden="true">Refresh</span><span class="sr-only">Refresh server and Docker data</span>';
 }
 
 function normalizeDetails(details) {
@@ -214,6 +232,7 @@ function renderViewMode() {
 
 function renderTableRow(server) {
   const detail = state.details.get(server.id) || { status: 'loading' };
+  const docker = state.docker.get(server.id) || { status: 'loading' };
   const storagePercent = Math.round(detail.storageUsedPercent || 0);
   const selfBadge = server.isSelf ? '<span class="self-badge">Dashboard</span>' : '';
   const error = detail.error ? `<div class="inline-error">${escapeHtml(detail.error)}</div>` : '';
@@ -224,7 +243,7 @@ function renderTableRow(server) {
       <td>
         <div class="server-identity">
           <div class="server-title-row">
-            <span class="server-name">${escapeHtml(server.name)}</span>
+            <a class="server-name server-name-link" href="/server.html?id=${encodeURIComponent(server.id)}">${escapeHtml(server.name)}</a>
             ${selfBadge}
           </div>
           ${error}
@@ -236,9 +255,11 @@ function renderTableRow(server) {
       <td class="nowrap">${metric(detail.cpus)}</td>
       <td class="nowrap">${metric(detail.memoryGb, ' GB')}</td>
       <td class="storage-cell">${renderStorageValue(detail, storagePercent)}</td>
+      <td class="docker-cell">${renderDockerSummary(docker)}</td>
       <td>
         <div class="row-actions">
-          <a class="table-link" href="${escapeAttribute(server.whoamiUrl)}" target="_blank" rel="noreferrer">Open</a>
+          <a class="table-link" href="/server.html?id=${encodeURIComponent(server.id)}">Details</a>
+          <a class="table-link" href="${escapeAttribute(server.whoamiUrl)}" target="_blank" rel="noreferrer">Whoami</a>
           <button class="quiet-action" type="button" data-edit-id="${escapeAttribute(server.id)}">Edit</button>
           <button class="quiet-action delete-button" type="button" data-delete-id="${escapeAttribute(server.id)}">Delete</button>
         </div>
@@ -248,6 +269,7 @@ function renderTableRow(server) {
 
 function renderCard(server) {
   const detail = state.details.get(server.id) || { status: 'loading' };
+  const docker = state.docker.get(server.id) || { status: 'loading' };
   const selfBadge = server.isSelf ? '<span class="self-badge">Dashboard</span>' : '';
   const storagePercent = Math.round(detail.storageUsedPercent || 0);
 
@@ -256,7 +278,7 @@ function renderCard(server) {
       <div class="card-top">
         <div>
           <div class="server-title-row">
-            <h3 class="server-name">${escapeHtml(server.name)}</h3>
+            <h3><a class="server-name server-name-link" href="/server.html?id=${encodeURIComponent(server.id)}">${escapeHtml(server.name)}</a></h3>
             ${selfBadge}
           </div>
           <p class="server-host">${escapeHtml(server.host)}</p>
@@ -276,13 +298,43 @@ function renderCard(server) {
         </div>
       </div>
       ${renderStorageUsage(detail, storagePercent)}
+      <div class="docker-card-summary">
+        <div class="docker-heading"><span>Docker</span>${renderDockerStatus(docker)}</div>
+        ${renderDockerMetrics(docker)}
+      </div>
       ${detail.error ? `<p class="inline-error">${escapeHtml(detail.error)}</p>` : ''}
       <div class="card-actions">
-        <a class="table-link" href="${escapeAttribute(server.whoamiUrl)}" target="_blank" rel="noreferrer">Open</a>
+        <a class="table-link" href="/server.html?id=${encodeURIComponent(server.id)}">Details</a>
+        <a class="table-link" href="${escapeAttribute(server.whoamiUrl)}" target="_blank" rel="noreferrer">Whoami</a>
         <button class="quiet-action" type="button" data-edit-id="${escapeAttribute(server.id)}">Edit</button>
         <button class="quiet-action delete-button" type="button" data-delete-id="${escapeAttribute(server.id)}">Delete</button>
       </div>
     </article>`;
+}
+
+function renderDockerSummary(docker) {
+  return `<div class="docker-table-summary">${renderDockerStatus(docker)}${renderDockerMetrics(docker)}</div>`;
+}
+
+function renderDockerStatus(docker) {
+  const statusClass = docker.status === 'up' ? 'status-up' : docker.status === 'down' ? 'status-down' : 'status-loading';
+  const label = docker.status === 'up' ? 'Connected' : docker.status === 'down' ? 'Unavailable' : 'Checking';
+  return `<span class="status-pill ${statusClass}"><span class="status-dot" aria-hidden="true"></span>${label}</span>`;
+}
+
+function renderDockerMetrics(docker) {
+  if (docker.status === 'loading') return '<span class="docker-pending">Loading Docker data</span>';
+  if (docker.status === 'down') return `<span class="docker-error" title="${escapeAttribute(docker.error || '')}">${escapeHtml(docker.error || 'Docker unavailable')}</span>`;
+  const containers = docker.containers || {};
+  const unhealthy = containers.health?.unhealthy || 0;
+  return `
+    <div class="docker-mini-grid">
+      <span><strong>${numberFormatter.format(containers.running || 0)}</strong> / ${numberFormatter.format(containers.total || 0)} running</span>
+      <span><strong>${numberFormatter.format(docker.stacks || 0)}</strong> stacks</span>
+      <span><strong>${numberFormatter.format(docker.images || 0)}</strong> images</span>
+      <span><strong>${numberFormatter.format(docker.volumes || 0)}</strong> volumes</span>
+      ${unhealthy ? `<span class="docker-unhealthy"><strong>${numberFormatter.format(unhealthy)}</strong> unhealthy</span>` : ''}
+    </div>`;
 }
 
 function renderStatus(detail) {
@@ -332,6 +384,7 @@ function openServerDialog(server = null) {
     elements.form.elements.ipAddress.value = server.ipAddress;
     elements.form.elements.host.value = server.host;
     elements.form.elements.whoamiUrl.value = server.whoamiUrl;
+    elements.form.elements.dockerBaseUrl.value = server.dockerBaseUrl || '';
     elements.form.elements.whoamiUsername.value = server.whoamiUsername || '';
     elements.form.elements.whoamiPassword.value = server.whoamiPassword || '';
   } else {
